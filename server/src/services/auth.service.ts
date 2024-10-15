@@ -188,13 +188,13 @@ export class AuthService extends BaseService {
       throw new BadRequestException('OAuth is not enabled');
     }
 
-    const url = await this.oauthRepository.authorize(oauth, dto.redirectUri);
+    const url = await this.oauthRepository.authorize(oauth, this.normalize(oauth, dto.redirectUri));
     return { url };
   }
 
   async callback(dto: OAuthCallbackDto, loginDetails: LoginDetails) {
     const { oauth } = await this.getConfig({ withCache: false });
-    const profile = await this.oauthRepository.getProfile(oauth, dto.url, this.normalize(oauth, dto.url.split('?')[0]));
+    const profile = await this.oauthRepository.getProfile(oauth, dto.url, this.normalize(oauth, dto.url));
     const { autoRegister, defaultStorageQuota, storageLabelClaim, storageQuotaClaim } = oauth;
     this.logger.debug(`Logging in with OAuth: ${JSON.stringify(profile)}`);
     let user = await this.userRepository.getByOAuthId(profile.sub);
@@ -254,11 +254,7 @@ export class AuthService extends BaseService {
 
   async link(auth: AuthDto, dto: OAuthCallbackDto): Promise<UserAdminResponseDto> {
     const { oauth } = await this.getConfig({ withCache: false });
-    const { sub: oauthId } = await this.oauthRepository.getProfile(
-      oauth,
-      dto.url,
-      this.normalize(oauth, dto.url.split('?')[0]),
-    );
+    const { sub: oauthId } = await this.oauthRepository.getProfile(oauth, dto.url, this.normalize(oauth, dto.url));
     const duplicate = await this.userRepository.getByOAuthId(oauthId);
     if (duplicate && duplicate.id !== auth.user.id) {
       this.logger.warn(`OAuth link account failed: sub is already linked to another user (${duplicate.email}).`);
@@ -371,8 +367,9 @@ export class AuthService extends BaseService {
 
   private normalize(
     { mobileRedirectUri, mobileOverrideEnabled }: { mobileRedirectUri: string; mobileOverrideEnabled: boolean },
-    redirectUri: string,
+    url: string,
   ) {
+    const redirectUri = url.split('?')[0];
     const isMobile = redirectUri.startsWith('app.immich:/');
     if (isMobile && mobileOverrideEnabled && mobileRedirectUri) {
       return mobileRedirectUri;
